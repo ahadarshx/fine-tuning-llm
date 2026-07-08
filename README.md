@@ -1,4 +1,4 @@
-# MIT 6.034 Course Assistant — QLoRA Fine-Tuned LLM
+# QLoRA Fine-Tuned LLM
 
 <p align="center">
   <img src="https://img.shields.io/badge/LLM-Qwen2.5--1.5B-blue">
@@ -14,7 +14,7 @@
 
 This project explores adapting a small open-source Large Language Model into a domain-specific AI teaching assistant.
 
-The assistant is trained on MIT 6.034 Artificial Intelligence course material using **QLoRA (Quantized Low-Rank Adaptation)** to make fine-tuning possible on consumer hardware.
+The assistant is trained using **QLoRA (Quantized Low-Rank Adaptation)** to make fine-tuning possible on consumer hardware.
 
 The goal was not only to fine-tune a model, but to build and evaluate an end-to-end LLM adaptation pipeline:
 
@@ -60,7 +60,7 @@ Why this model?
 ## System Architecture
 
 ```
-MIT Course Notes
+Course Notes
         |
         v
 Markdown Processing
