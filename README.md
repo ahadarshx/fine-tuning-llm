@@ -1,418 +1,55 @@
-# QLoRA Fine-Tuned LLM
+<div align="center">
 
-<p align="center">
-  <img src="https://img.shields.io/badge/LLM-Qwen2.5--1.5B-blue">
-  <img src="https://img.shields.io/badge/Fine--Tuning-QLoRA-green">
-  <img src="https://img.shields.io/badge/Framework-PyTorch-red">
-  <img src="https://img.shields.io/badge/HuggingFace-Transformers-yellow">
-  <img src="https://img.shields.io/badge/UI-Gradio-orange">
-  <img src="https://img.shields.io/badge/GPU-GTX%201650-lightgrey">
-</p>
+# fine-tuning llm
 
+**a small open model, qlora-tuned into a course teaching assistant on a 4 GB GPU**
 
-## Overview
+<img alt="Qwen2.5 1.5B" src="https://img.shields.io/badge/Qwen2.5%201.5B-b6c4ff?style=flat-square&labelColor=1e1f25&logo=huggingface&logoColor=e3e1e9"> <img alt="QLoRA" src="https://img.shields.io/badge/QLoRA-dce1ff?style=flat-square&labelColor=1e1f25"> <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-c6c6d0?style=flat-square&labelColor=1e1f25&logo=pytorch&logoColor=e3e1e9"> <img alt="GTX 1650" src="https://img.shields.io/badge/GTX%201650%20·%204%20GB-b6c4ff?style=flat-square&labelColor=1e1f25&logo=nvidia&logoColor=e3e1e9">
 
-This project explores adapting a small open-source Large Language Model into a domain-specific AI teaching assistant.
+| | base | fine-tuned |
+|---|---:|---:|
+| ROUGE-L | 0.127 | **0.244** |
+| trainable parameters | | 2.1M of 1.5B (0.14%) |
 
-The assistant is trained using **QLoRA (Quantized Low-Rank Adaptation)** to make fine-tuning possible on consumer hardware.
+</div>
 
-The goal was not only to fine-tune a model, but to build and evaluate an end-to-end LLM adaptation pipeline:
+## What's in it
 
-- Course data preparation
-- Synthetic instruction dataset generation
-- Parameter-efficient fine-tuning
-- Evaluation pipeline
-- Interactive chatbot deployment
+- `generate_data.py`: turns course notes into natural student questions and answers, using Qwen itself
+- `audit_data.py`: checks the dataset for repeats and leaks before training
+- `train.py`: QLoRA on 4-bit NF4 with double quantisation, adapters on the attention projections
+- `evaluate.py`: base vs adapter on concept recall and ROUGE-L
+- `app.py`: a Gradio chat to try it
 
+## How it got here
 
-## Motivation
+**v1** trained straight on the notes with templated questions like "Explain section 3.3". The model memorised headings and copied note formatting instead of teaching.
 
-Large language models contain broad knowledge, but they are not optimized for specific courses or institutional material.
+**v2** generates the kind of questions students actually ask ("Why is A* guaranteed to find an optimal path?") and answers them conversationally. 663 train, 142 validation and 119 test examples; validation loss fell every epoch (1.086, 1.050, 1.046).
 
-The objective was to answer:
-
-> Can a small language model be adapted into a course-specific teaching assistant using limited hardware?
-
-Key constraints:
-
-- Consumer GPU only
-- Limited VRAM
-- Small domain-specific corpus
-- Need for explainable educational responses
-
-
-## Model
-
-Base model:
-
-```
-Qwen/Qwen2.5-1.5B-Instruct
-```
-
-Why this model?
-
-- Strong instruction-following capabilities
-- Small enough for local experimentation
-- Supports efficient QLoRA fine-tuning
-- Good Hugging Face ecosystem compatibility
-
-
-## System Architecture
-
-```
-Course Notes
-        |
-        v
-Markdown Processing
-        |
-        v
-Synthetic Q&A Generation
-        |
-        v
-Instruction Dataset
-        |
-        v
-Qwen2.5-1.5B
-        +
-QLoRA Adapter
-        |
-        v
-Fine-Tuned Course Assistant
-        |
-        v
-Gradio Chat Interface
-```
-
-
-## Why QLoRA?
-
-Traditional fine-tuning updates every model parameter.
-
-For a 1.5B parameter model, this requires significant GPU memory.
-
-QLoRA solves this by:
-
-1. Loading the base model in 4-bit precision
-2. Freezing original model weights
-3. Training small LoRA adapter matrices
-
-In this project:
-
-```
-Total Parameters:
-~1.5 Billion
-
-Trainable Parameters:
-~2.1 Million
-
-Trainable:
-~0.14%
-```
-
-This enabled fine-tuning on:
-
-```
-NVIDIA GTX 1650
-4 GB VRAM
-```
-
-
-## Training Configuration
-
-### Quantization
-
-```python
-load_in_4bit=True
-bnb_4bit_quant_type="nf4"
-bnb_4bit_use_double_quant=True
-```
-
-Purpose:
-
-- Reduce VRAM usage
-- Preserve model performance
-- Enable training locally
-
-
-### LoRA Configuration
-
-```python
-r = 8
-alpha = 16
-dropout = 0.05
-```
-
-Reasoning:
-
-- `r` controls adapter capacity
-- `alpha` controls adapter influence
-- dropout reduces overfitting
-
-
-### Target Modules
-
-```python
-q_proj
-k_proj
-v_proj
-o_proj
-```
-
-Attention projection layers were targeted because they provide strong adaptation capability with minimal trainable parameters.
-
-
-### Batch Strategy
-
-```python
-batch_size = 1
-gradient_accumulation_steps = 16
-```
-
-Effective batch size:
-
-```
-1 × 16 = 16
-```
-
-Gradient accumulation allowed stable training despite limited GPU memory.
-
-
-# Dataset Evolution
-
-The project went through multiple iterations.
-
----
-
-# Version 1: Direct Note Fine-Tuning
-
-Initial pipeline:
-
-```
-Course Notes
-      |
-      v
-Question Templates
-      |
-      v
-Training Examples
-```
-
-Example:
-
-Question:
-
-```
-Explain Section 3.3 — Dynamic Ordering
-```
-
-Answer:
-
-```
-Choose variable with smallest remaining domain...
-```
-
-## Problems Found
-
-The model began overfitting.
-
-Root causes:
-
-### 1. Artificial Questions
-
-Generated prompts did not match real student questions.
-
-The model learned:
-
-```
-Section Heading → Notes
-```
-
-instead of:
-
-```
-Student Question → Explanation
-```
-
-
-### 2. Raw Note Responses
-
-Answers were copied directly from notes.
-
-The model learned note formatting rather than conversational teaching style.
-
-
-### 3. Repetitive Dataset
-
-Limited question templates caused repeated examples.
-
-This increased memorization.
-
-
-### 4. Small Corpus Size
-
-A 1.5B parameter model could easily memorize a small course corpus.
-
-
-## Solution
-
-Redesign the dataset generation pipeline.
-
-
-# Version 2: Synthetic Instruction Dataset
-
-New pipeline:
-
-```
-Course Notes
-      |
-      v
-Qwen2.5 Generator
-      |
-      v
-Natural Q&A Dataset
-      |
-      v
-Fine-Tuning
-```
-
-Instead of:
-
-```
-Explain A*
-```
-
-The dataset contained:
-
-```
-Why is A* guaranteed to find an optimal path?
-```
-
-This better matched real student interactions.
-
-
-## Dataset Statistics
-
-| Split | Examples |
-|---|---:|
-| Train | 663 |
-| Validation | 142 |
-| Test | 119 |
-
-
-## Training Results
-
-Validation loss:
-
-| Epoch | Validation Loss |
-|-|-|
-| 1 | 1.0859 |
-| 2 | 1.0498 |
-| 3 | 1.0455 |
-
-Validation loss continued improving, showing healthier learning behavior compared to the first version.
-
-
-# Evaluation
-
-Evaluation used:
-
-- Required concept recall
-- ROUGE-L similarity
-- Manual factual review
-
-
-## Results
-
-| Model | ROUGE-L |
-|-|-:|
-| Base Qwen2.5-1.5B | 0.127 |
-| Fine-Tuned Adapter | 0.244 |
-
-The fine-tuned model produced responses more aligned with the course reference material.
-
-
-# Interface
-
-A Gradio application was created for interaction.
-
-Example questions:
-
-```
-How do BFS and DFS differ?
-
-Why is A* optimal?
-
-Does alpha-beta pruning change minimax results?
-```
-
-
-Run:
+## Run
 
 ```bash
-python app.py
+git clone https://github.com/ahadarshx/fine-tuning-llm.git
+cd fine-tuning-llm/pipeline
+pip install -r requirements.txt
+
+python generate_data.py              # notes in data/raw → data/processed
+python train.py                      # adapter in outputs/qwen-course-lora-v2
+python evaluate.py --model adapter   # or --model base
+python app.py                        # http://127.0.0.1:7860
 ```
 
-Open:
+## Settings
 
-```
-http://127.0.0.1:7860
-```
+| | |
+|---|---|
+| LoRA | `r=8`, `alpha=16`, `dropout=0.05` on `q k v o` projections |
+| batch | 1, with 16 gradient accumulation steps |
+| sequence | 512 tokens, 3 epochs, learning rate `5e-5` |
 
+## Limits
 
-# Current Limitations
+It still answers some off-topic questions: the dataset had far more answers than refusals. The fix is retrieval, which became [rag-course-assistant](https://github.com/ahadarshx/rag-course-assistant).
 
-The model still answers some out-of-domain questions.
-
-Example:
-
-```
-Who won the FIFA World Cup?
-```
-
-Reason:
-
-The dataset contained many more answering examples than refusal examples, so the model learned answering behavior more strongly than domain boundaries.
-
-
-# Future Improvements
-
-## Retrieval-Augmented Generation (RAG)
-
-Next iteration:
-
-```
-User Question
-        |
-        v
-Retrieve Relevant Course Material
-        |
-        v
-LLM Generates Grounded Answer
-```
-
-Expected benefits:
-
-- Better factual accuracy
-- Less hallucination
-- Easier course updates
-- Support for PDFs, slides, and lecture material
-
-
-## Larger Models
-
-Future experiments:
-
-- Qwen2.5-7B
-- Llama 3.1 8B
-- Larger instruction models
-
-
-# Tech Stack
-
-- Python
-- PyTorch
-- Hugging Face Transformers
-- PEFT
-- bitsandbytes
-- QLoRA
-- Gradio
+<sub>Qwen2.5 · Transformers · PEFT · bitsandbytes · Gradio</sub>
